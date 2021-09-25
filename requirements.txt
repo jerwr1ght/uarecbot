@@ -11,7 +11,6 @@ click==7.1.2
 colorama==0.4.3
 comtypes==1.1.7
 config==0.5.0.post0
-configparser==5.0.0
 cssselect==1.1.0
 discord.py==1.4.1
 dukpy==0.2.3
