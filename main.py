@@ -62,7 +62,7 @@ def editing_lang(message, loc_lang):
     db.commit()
 
 def is_user_admin(message, user, loc_lang):
-    if message.chat.type != 'private' and bot.get_chat_member(message.chat.id, message.from_user.id).status.lower() not in ['administrator', 'owner', 'creator']:
+    if message.chat.type != 'private' and bot.get_chat_member(message.chat.id, user.id).status.lower() not in ['administrator', 'owner', 'creator']:
         bot.send_message(message.chat.id, f'⚠️ {mention_user(user)}, {config[f"{loc_lang}"]["noadmin"][0].lower()}{config[f"{loc_lang}"]["noadmin"][1:]}', parse_mode='html')
         return False
     else:
@@ -128,7 +128,8 @@ def voice_processing(message):
 
     msg = bot.send_message(message.chat.id, f'{config[f"{loc_lang}"]["trying"]}...', parse_mode='html')
     text = ''
-    text += recoginze_your_language(file_name, 'uk-UA', loc_lang)
+    for row in config.sections():
+        text += f'<b>{config[f"{row}"]["true_name"]}</b> - {recoginze_your_language(file_name, row, loc_lang)}\n'
 
     os.remove(file_name)
     print(f'Log: file {file_name} is deleted')
@@ -137,7 +138,7 @@ def voice_processing(message):
         user = get_user(message.forward_from)
     else:
         user = get_user(message.from_user)
-    bot.edit_message_text(chat_id = msg.chat.id, message_id = msg.message_id, text = f'{config[f"{loc_lang}"]["from"]} <b>{user}</b>:\n{text[0].upper()}{text[1:]}\n\n<code>P.S. {config[f"{loc_lang}"]["bv"]} 🧑‍💻</code>', parse_mode='html')
+    bot.edit_message_text(chat_id = msg.chat.id, message_id = msg.message_id, text = f'{config[f"{loc_lang}"]["from"]} <b>{user}</b>:\n\n{text[0].upper()}{text[1:]}\n<code>P.S. {config[f"{loc_lang}"]["bv"]} 🧑‍💻</code>', parse_mode='html')
     #bot.send_message(message.chat.id, f'{config[f"{loc_lang}"]["from"]} <b>{user}</b>:\n{text[0].upper()}{text[1:]}\n\n<code>P.S. {config[f"{loc_lang}"]["bv"]} 🧑‍💻</code>', parse_mode='html')
 
 @bot.message_handler(commands=['clang', 'cl'])
