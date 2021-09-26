@@ -130,7 +130,8 @@ def count_all(message, loc_lang, is_full):
         msg = f'🗣 <b>{config[f"{loc_lang}"]["recognized"]}</b> 🗣\n\n'
         msg += f'<b>{config[f"{loc_lang}"]["voices"]}</b> - {local_voices}\n'
         msg += f'<b>{config[f"{loc_lang}"]["video_notes"]}</b> - {local_video_notes}\n'
-        msg += f'<b>{config[f"{loc_lang}"]["videos"]}</b> - {local_videos}\n'
+        msg += f'<b>{config[f"{loc_lang}"]["videos"]}</b> - {local_videos}\n\n'
+        msg += f'<b>{config[f"{loc_lang}"]["vvv"]}</b> - {local_voices+local_video_notes+local_videos}\n'
     else:
         msg = f'{config[f"{loc_lang}"]["recognized"]} {config[f"{loc_lang}"]["all"]}: <b>{total}</b>'
     return msg
