@@ -144,10 +144,10 @@ def welcome(message):
 def welcome(message):
     loc_lang = working_with_sql(message)
     if 'gstats' in message.text.lower():
-        msg = count_all(message, loc_lang, False)
+        msg = '🗣 '+count_all(message, loc_lang, False)
     else:
         msg = count_all(message, loc_lang, True)
-    bot.send_message(message.chat.id, '🗣 '+msg, parse_mode='html')
+    bot.send_message(message.chat.id, msg, parse_mode='html')
 
 
 def editing_lang(message, loc_lang):
