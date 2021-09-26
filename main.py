@@ -114,6 +114,7 @@ def count_all(message, loc_lang, is_full):
     sql.execute(f"SELECT * FROM stats")
     rows = sql.fetchall()
     voices, video_notes, videos = 0,0,0
+    local_voices, local_video_notes, local_videos = 0, 0, 0
     
     for row in rows:
         chat_id = row[0]
