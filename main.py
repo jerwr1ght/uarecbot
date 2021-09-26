@@ -40,7 +40,7 @@ def sending_updates():
         except Exception as ex:
             print(ex)
         finally:
-            time.sleep(1)
+            sleep(1)
     print(f'Message about new version was sent to {c}/{len(rows)} chats')
     bot.send_message(703934578, f'Message about new version was sent to <b>{c}/{len(rows)}</b> chats', parse_mode='html')
 
