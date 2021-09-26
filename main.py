@@ -188,15 +188,14 @@ def recognize_your_language(file_name, lang, loc_lang, file_type, message, r_c):
         audio = engine.record(source)
 
     try:
-        r_c += 1
         print(f'Log: file {file_name} is being analized')
         text = engine.recognize_google(audio, language=lang)
+        r_c += 1
         if r_c == 1:
             working_with_stats(message, file_type)
     except Exception as ex:
         text = f'{config[f"{loc_lang}"]["r_error"]} 😣'
-        print({ex})
-
+        print(ex)
     print(f'Log: file {file_name} is recognized with {lang} language')
     return text, r_c
 
@@ -255,6 +254,7 @@ def voice_processing(message):
     r_c = 0
     for row in config.sections():
         recognized, r_c = recognize_your_language(file_name, row, loc_lang, file_type, message, r_c)
+        print(r_c)
         text += f'<b>{config[f"{row}"]["true_name"]}</b> - {recognized}\n'
 
     os.remove(file_name)
