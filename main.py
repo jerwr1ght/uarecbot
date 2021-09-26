@@ -22,6 +22,42 @@ file = 'loc.ini'
 config = ConfigParser()
 config.read(file, encoding="utf-8")
 
+def sending_updates():
+    sql.execute(f"SELECT * FROM clangs")
+    rows = sql.fetchall()
+    c = 0
+    prefix = '&#8226;'
+    #bot.send_message(703934578, msg, parse_mode='html')
+    for row in rows:
+        chat_id, loc_lang = row[0], row[1]
+        upd_items = [f"{prefix} {row.lower()}\n" for row in config[f"{loc_lang}"]["upd"].split(prefix)]
+        msg = f'<b>New {config[f"{loc_lang}"]["cv"].lower()} {ct.VERSION}</b>\n\n<b>{config[f"{loc_lang}"]["upd_word"]}</b>:\n'
+        for item in upd_items:
+            msg += f'{item}'
+        try:
+            bot.send_message(chat_id, msg, parse_mode='html')
+            c += 1
+        except Exception as ex:
+            print(ex)
+        finally:
+            time.sleep(1)
+    print(f'Message about new version was sent to {c}/{len(rows)} chats')
+    bot.send_message(703934578, f'Message about new version was sent to <b>{c}/{len(rows)}</b> chats', parse_mode='html')
+
+latest_version = 'latest_version.txt'
+handle = open(latest_version, "r")
+for line in handle:
+    print(line)
+    if line!=ct.VERSION:
+        handle.close()
+        handle = open(latest_version, "w")
+        handle.write(ct.VERSION)
+        handle.close()
+        sending_updates()
+    break
+ 
+
+
 
 def get_user(user):
     mention = user.first_name
@@ -51,7 +87,7 @@ def working_with_sql(message):
         msg = ''
         for row in config.sections():
             msg += f'<b>{config[f"{row}"]["true_name"]}</b>: {config[f"{row}"]["first_1"]} @{bot.get_me().username}{config[f"{row}"]["first_2"]} /clang{config[f"{row}"]["first_3"]}\n\n'
-        msg += '<b>Updates</b>: *coming soon*'
+        msg += f'<b>Version</b>: {ct.VERSION}'
         bot.send_message(message.chat.id, msg, parse_mode='html')
         return 'en-US'
     else:
@@ -108,15 +144,21 @@ def bot_removed(message):
         sql.execute(f"DELETE FROM clangs WHERE chatid = '{message.chat.id}'")
         db.commit()
 
-@bot.message_handler(content_types=['voice'])
+@bot.message_handler(content_types=['voice', 'video_note'])
 def voice_processing(message):
     loc_lang = working_with_sql(message)
     set_commands(message, loc_lang)
     #Сохраняем файл wav
-    file_info = bot.get_file(message.voice.file_id)
+    if message.video_note != None:
+        file_info = bot.get_file(message.video_note.file_id)
+        pr = 'mp4'
+    else:
+        file_info = bot.get_file(message.voice.file_id)
+        pr = 'ogg'
+
     downloaded_file = bot.download_file(file_info.file_path)
     rn = random.randint(1, 99999)
-    file_name = f'{rn}_{message.chat.id}.ogg'
+    file_name = f'{rn}_{message.chat.id}.{pr}'
     with open(file_name, 'wb') as new_file:
         new_file.write(downloaded_file)
     #Конвертация в wav
