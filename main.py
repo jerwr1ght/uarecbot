@@ -14,6 +14,8 @@ db = psycopg2.connect(database='dbir1kfgtc2gr', user='wgqusjxghdknsd', port="543
 sql=db.cursor()
 sql.execute("""CREATE TABLE IF NOT EXISTS clangs (chatid TEXT, language TEXT)""")
 db.commit()
+sql.execute("""CREATE TABLE IF NOT EXISTS versions (num TEXT)""")
+db.commit()
 
 bot=telebot.TeleBot(ct.TOKEN)
 
@@ -44,17 +46,17 @@ def sending_updates():
     print(f'Message about new version was sent to {c}/{len(rows)} chats')
     bot.send_message(703934578, f'Message about new version was sent to <b>{c}/{len(rows)}</b> chats', parse_mode='html')
 
-latest_version = 'latest_version.txt'
-handle = open(latest_version, "r")
-for line in handle:
-    print(line)
-    if line!=ct.VERSION:
-        handle.close()
-        handle = open(latest_version, "w")
-        handle.write(ct.VERSION)
-        handle.close()
+sql.execute(f"SELECT * FROM versions")
+res = sql.fetchone()
+if res is None:
+    sql.execute(f"INSERT INTO versions VALUES ('{ct.VERSION}')")
+    db.commit()
+    sending_updates()
+else: 
+    if res[0] != ct.VERSION:
+        sql.execute(f"UPDATE versions SET num = '{ct.VERSION}'")
+        db.commit()
         sending_updates()
-    break
  
 
 
