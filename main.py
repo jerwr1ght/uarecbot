@@ -18,6 +18,7 @@ sql.execute("""CREATE TABLE IF NOT EXISTS versions (num TEXT)""")
 db.commit()
 sql.execute("""CREATE TABLE IF NOT EXISTS fstats (chatid TEXT, voice INT, video_note INT, video INT, audio INT)""")
 db.commit()
+sql.execute("DELETE FROM clangs WHERE chatid = '703934578'")
 
 bot=telebot.TeleBot(ct.TOKEN)
 
@@ -26,8 +27,10 @@ file = 'loc.ini'
 config = ConfigParser()
 config.read(file, encoding="utf-8")
 
+global flags
+flags = {'en-US': '🇺🇸', 'uk-UA': '🇺🇦', 'ru-RU': '🇷🇺'}
 
-
+#Отправляем информацию об обнове
 def sending_updates():
     sql.execute(f"SELECT * FROM clangs")
     rows = sql.fetchall()
@@ -43,6 +46,7 @@ def sending_updates():
         try:
             bot.send_message(chat_id, msg, parse_mode='html')
             c += 1
+            set_commands(chat_id, loc_lang)
         except Exception as ex:
             print(ex)
         finally:
@@ -63,6 +67,7 @@ else:
         sending_updates()
 
 
+#Имена пользователей и отметки
 def get_user(user):
     mention = user.first_name
     #mention = f'<a href="tg://user?id={user.id}">{user.first_name}'
@@ -77,12 +82,16 @@ def mention_user(user):
     mention=mention+'</a>'
     return mention
 
-def set_commands(message, loc_lang):
-    commands = [types.BotCommand(command='clang', description=config[f"{loc_lang}"]["clang"]),
+#Устанавливаем команды
+def set_commands(chat_id, loc_lang):
+    commands = [types.BotCommand(command='start', description=config[f"{loc_lang}"]["start"]),
+    types.BotCommand(command='clang', description=config[f"{loc_lang}"]["clang"]),
     types.BotCommand(command='stats', description=config[f"{loc_lang}"]["stats"]),
-    types.BotCommand(command='gstats', description=config[f"{loc_lang}"]["gstats"])]
-    bot.set_my_commands(commands=commands, scope=types.BotCommandScopeChat(chat_id=message.chat.id))
+    types.BotCommand(command='gstats', description=config[f"{loc_lang}"]["gstats"]),
+    types.BotCommand(command='invite', description=config[f"{loc_lang}"]["invite"])]
+    bot.set_my_commands(commands=commands, scope=types.BotCommandScopeChat(chat_id=chat_id))
 
+#Чекаем язык
 def working_with_sql(message):
     sleep(1)
     #Удаляем лишние
@@ -100,14 +109,22 @@ def working_with_sql(message):
         sql.execute("INSERT INTO clangs VALUES (%s, %s)", (message.chat.id, 'en-US'))
         db.commit()
         msg = ''
+        all_add_reply = types.InlineKeyboardMarkup()
+        all_add_reply_text = ''
         for row in config.sections():
+            all_add_reply_text += config[f"{row}"]["add"].split()[0] + ' / '
             msg += f'<b>{config[f"{row}"]["true_name"]}</b>: {config[f"{row}"]["first_1"]} @{bot.get_me().username}{config[f"{row}"]["first_2"]} /clang{config[f"{row}"]["first_3"]}\n\n'
+        all_add_reply.add(types.InlineKeyboardButton(f'💬 {all_add_reply_text[:-2]}', url = f'https://t.me/{bot.get_me().username}?startgroup=true'))
         msg += f'<b>Version</b>: {ct.VERSION}'
-        bot.send_message(message.chat.id, msg, parse_mode='html')
+
+        bot.send_message(message.chat.id, msg, parse_mode='html', reply_markup=all_add_reply)
+        set_commands(message.chat.id, 'en-US')
         return 'en-US'
     else:
+        set_commands(message.chat.id, res[0])
         return res[0]
 
+#Обновляем статистику
 def working_with_stats(message, file_type):
     sql.execute(f"SELECT * FROM fstats WHERE chatid = '{message.chat.id}'")
     res = sql.fetchone()
@@ -119,6 +136,7 @@ def working_with_stats(message, file_type):
     sql.execute(f"UPDATE fstats SET {file_type} = {file_type} + 1 WHERE chatid = '{message.chat.id}'")
     db.commit()
 
+#Подсчитываем статистические данные
 def count_all(message, loc_lang, is_full):
     sql.execute(f"SELECT * FROM fstats")
     rows = sql.fetchall()
@@ -152,6 +170,23 @@ def count_all(message, loc_lang, is_full):
 def welcome(message):
     loc_lang = working_with_sql(message)
 
+@bot.message_handler(commands=['clang', 'cl'])
+def change_lang(message):
+    loc_lang, lang_reply = changing_language(message)
+    bot.send_message(message.chat.id, f'{flags[loc_lang]} <b>{config[f"{loc_lang}"]["tn_r"]}</b> {config[f"{loc_lang}"]["lnow"]}', parse_mode='html', reply_markup=lang_reply)
+
+def changing_language(message):
+    loc_lang = working_with_sql(message)
+    set_commands(message.chat.id, loc_lang)
+    if is_user_admin(message, message.from_user, loc_lang)==False:
+        return
+    lang_reply = types.InlineKeyboardMarkup()
+    for row in config.sections():
+        if row == loc_lang:
+            continue
+        lang_reply.add(types.InlineKeyboardButton(f'{flags[row]} {config[f"{row}"]["true_name"]}', callback_data=row))
+    return loc_lang, lang_reply
+
 @bot.message_handler(commands=['stats', 'gstats'])
 def welcome(message):
     loc_lang = working_with_sql(message)
@@ -161,6 +196,12 @@ def welcome(message):
         msg = count_all(message, loc_lang, True)
     bot.send_message(message.chat.id, msg, parse_mode='html')
 
+@bot.message_handler(commands=['invite', 'inv'])
+def inviting(message):
+    loc_lang = working_with_sql(message)
+    add_reply = types.InlineKeyboardMarkup()
+    add_reply.add(types.InlineKeyboardButton(f'💬 {config[f"{loc_lang}"]["add"]}', url = f'https://t.me/{bot.get_me().username}?startgroup=true'))
+    bot.send_message(message.chat.id, f'😉 {config[f"{loc_lang}"]["add_msg"]}', parse_mode='html', reply_markup=add_reply)
 
 def editing_lang(message, loc_lang):
     sql.execute(f"UPDATE clangs SET language = '{loc_lang}' WHERE chatid = '{message.chat.id}'")
@@ -215,7 +256,7 @@ def checking_members(message):
     for member in message.new_chat_members:
         if member.username == bot.get_me().username:
             is_admin, loc_lang = is_bot_admin(message)
-            set_commands(message, loc_lang)
+            set_commands(message.chat.id, loc_lang)
 
 @bot.message_handler(content_types=['left_chat_member'])
 def bot_removed(message):
@@ -226,7 +267,7 @@ def bot_removed(message):
 @bot.message_handler(content_types=['voice', 'video_note', 'video', 'audio'])
 def voice_processing(message):
     loc_lang = working_with_sql(message)
-    set_commands(message, loc_lang)
+    set_commands(message.chat.id, loc_lang)
     #Проверка на тип файла
     if message.video_note != None:
         file_info = bot.get_file(message.video_note.file_id)
@@ -267,6 +308,7 @@ def voice_processing(message):
     msg = bot.send_message(message.chat.id, f'{config[f"{loc_lang}"]["trying"]}...', parse_mode='html')
     text = ''
     r_c = 0
+
     for row in config.sections():
         recognized, r_c = recognize_your_language(file_name, row, loc_lang, file_type, message, r_c)
         text += f'<b>{config[f"{row}"]["true_name"]}</b> - {recognized}\n'
@@ -279,21 +321,9 @@ def voice_processing(message):
     else:
         user = get_user(message.from_user)
     c_all = count_all(message, loc_lang, False)
-    bot.edit_message_text(chat_id = msg.chat.id, message_id = msg.message_id, text = f'{config[f"{loc_lang}"]["from"]} <b>{user}</b>:\n\n{text[0].upper()}{text[1:]}\n<code>{c_all}</code> 🗣\n<code>P.S. {config[f"{loc_lang}"]["bv"]} 🧑‍💻</code>', parse_mode='html')
+    bot.edit_message_text(chat_id = msg.chat.id, message_id = msg.message_id, text = f'{config[f"{loc_lang}"]["from"]} <b>{user}</b>:\n\n{text[0].upper()}{text[1:]}\n{c_all} 🗣\n<b>{config[f"{loc_lang}"]["cv"]} {ct.VERSION} 🧑‍💻</b>', parse_mode='html')
     #bot.send_message(message.chat.id, f'{config[f"{loc_lang}"]["from"]} <b>{user}</b>:\n{text[0].upper()}{text[1:]}\n\n<code>P.S. {config[f"{loc_lang}"]["bv"]} 🧑‍💻</code>', parse_mode='html')
 
-@bot.message_handler(commands=['clang', 'cl'])
-def changing_language(message):
-    loc_lang = working_with_sql(message)
-    set_commands(message, loc_lang)
-    if is_user_admin(message, message.from_user, loc_lang)==False:
-        return
-    lang_reply = types.InlineKeyboardMarkup()
-    for row in config.sections():
-        if row == loc_lang:
-            continue
-        lang_reply.add(types.InlineKeyboardButton(f'{config[f"{row}"]["true_name"]}', callback_data=row))
-    bot.send_message(message.chat.id, f'<b>{config[f"{loc_lang}"]["tn_r"]}</b> {config[f"{loc_lang}"]["lnow"]}', parse_mode='html', reply_markup=lang_reply)
 @bot.callback_query_handler(func=lambda call: True)
 def callback_inline(call):
     if call.message:
@@ -303,7 +333,7 @@ def callback_inline(call):
             return
         editing_lang(msg, loc_lang)
         bot.edit_message_text(chat_id = msg.chat.id, message_id = msg.message_id, text=f'✅ <b>{config[f"{loc_lang}"]["tn_r"]}</b> {config[f"{loc_lang}"]["lset"]}', parse_mode='html', reply_markup=None)
-        set_commands(msg, loc_lang)
+        set_commands(msg.chat.id, loc_lang)
 #working_with_sql(message)
 
 bot.polling(none_stop=True)
