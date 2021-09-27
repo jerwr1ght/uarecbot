@@ -37,7 +37,7 @@ def sending_updates():
     for row in rows:
         chat_id, loc_lang = row[0], row[1]
         upd_items = [f"{prefix} {row.lower()}\n" for row in config[f"{loc_lang}"]["upd"].split(prefix)]
-        msg = f'<b>New {config[f"{loc_lang}"]["cv"].lower()} {ct.VERSION}</b>\n\n<b>{config[f"{loc_lang}"]["upd_word"]}</b>:\n'
+        msg = f'<b>{config[f"{loc_lang}"]["new"]} {config[f"{loc_lang}"]["cv"].lower()} {ct.VERSION}</b>\n\n<b>{config[f"{loc_lang}"]["upd_word"]}</b>:\n'
         for item in upd_items:
             msg += f'{item}'
         try:
