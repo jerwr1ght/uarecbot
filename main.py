@@ -84,10 +84,19 @@ def set_commands(message, loc_lang):
     bot.set_my_commands(commands=commands, scope=types.BotCommandScopeChat(chat_id=message.chat.id))
 
 def working_with_sql(message):
+    sleep(1)
+    #Удаляем лишние
+    sql.execute(f"SELECT language FROM clangs WHERE chatid = '{message.chat.id}'")
+    rows = sql.fetchall()
+    if len(rows)>1:
+        sql.execute(f"DELETE FROM clangs WHERE chatid = '{message.chat.id}' AND language = 'en-US'")
+        db.commit()
+
+    sleep(1)
     sql.execute(f"SELECT language FROM clangs WHERE chatid = '{message.chat.id}'")
     res = sql.fetchone()
 
-    if res is None:
+    if res == None:
         sql.execute("INSERT INTO clangs VALUES (%s, %s)", (message.chat.id, 'en-US'))
         db.commit()
         msg = ''
@@ -254,7 +263,6 @@ def voice_processing(message):
     r_c = 0
     for row in config.sections():
         recognized, r_c = recognize_your_language(file_name, row, loc_lang, file_type, message, r_c)
-        print(r_c)
         text += f'<b>{config[f"{row}"]["true_name"]}</b> - {recognized}\n'
 
     os.remove(file_name)
