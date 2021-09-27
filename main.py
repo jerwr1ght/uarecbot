@@ -16,7 +16,7 @@ sql.execute("""CREATE TABLE IF NOT EXISTS clangs (chatid TEXT, language TEXT)"""
 db.commit()
 sql.execute("""CREATE TABLE IF NOT EXISTS versions (num TEXT)""")
 db.commit()
-sql.execute("""CREATE TABLE IF NOT EXISTS stats (chatid TEXT, voice INT, video_note INT, video INT)""")
+sql.execute("""CREATE TABLE IF NOT EXISTS fstats (chatid TEXT, voice INT, video_note INT, video INT, audio INT)""")
 db.commit()
 
 bot=telebot.TeleBot(ct.TOKEN)
@@ -109,21 +109,21 @@ def working_with_sql(message):
         return res[0]
 
 def working_with_stats(message, file_type):
-    sql.execute(f"SELECT * FROM stats WHERE chatid = '{message.chat.id}'")
+    sql.execute(f"SELECT * FROM fstats WHERE chatid = '{message.chat.id}'")
     res = sql.fetchone()
 
     if res is None:
-        sql.execute("INSERT INTO stats VALUES (%s, %s, %s, %s)", (message.chat.id, 0, 0, 0))
+        sql.execute("INSERT INTO fstats VALUES (%s, %s, %s, %s, %s)", (message.chat.id, 0, 0, 0, 0))
         db.commit()
 
-    sql.execute(f"UPDATE stats SET {file_type} = {file_type} + 1 WHERE chatid = '{message.chat.id}'")
+    sql.execute(f"UPDATE fstats SET {file_type} = {file_type} + 1 WHERE chatid = '{message.chat.id}'")
     db.commit()
 
 def count_all(message, loc_lang, is_full):
-    sql.execute(f"SELECT * FROM stats")
+    sql.execute(f"SELECT * FROM fstats")
     rows = sql.fetchall()
-    voices, video_notes, videos = 0,0,0
-    local_voices, local_video_notes, local_videos = 0, 0, 0
+    voices, video_notes, videos, audios = 0,0,0,0
+    local_voices, local_video_notes, local_videos, local_audios = 0, 0, 0, 0
     
     for row in rows:
         chat_id = row[0]
@@ -131,16 +131,18 @@ def count_all(message, loc_lang, is_full):
         voices += row[1]
         video_notes += row[2]
         videos += row[3]
+        audios += row[4]
         if chat_id == str(message.chat.id):
-            local_voices, local_video_notes, local_videos = row[1], row[2], row[3]
-    total = voices + video_notes + videos
+            local_voices, local_video_notes, local_videos, local_audios = row[1], row[2], row[3], row[4]
+    total = voices + video_notes + videos + audios
     msg = ''
     if is_full == True:
         msg = f'🗣 <b>{config[f"{loc_lang}"]["recognized"]}</b> 🗣\n\n'
         msg += f'<b>{config[f"{loc_lang}"]["voices"]}</b> - {local_voices}\n'
         msg += f'<b>{config[f"{loc_lang}"]["video_notes"]}</b> - {local_video_notes}\n'
-        msg += f'<b>{config[f"{loc_lang}"]["videos"]}</b> - {local_videos}\n\n'
-        msg += f'<b>{config[f"{loc_lang}"]["vvv"]}</b> - {local_voices+local_video_notes+local_videos}\n'
+        msg += f'<b>{config[f"{loc_lang}"]["videos"]}</b> - {local_videos}\n'
+        msg += f'<b>{config[f"{loc_lang}"]["audios"]}</b> - {local_audios}\n\n'
+        msg += f'<b>{config[f"{loc_lang}"]["vvv"]}</b> - {local_voices+local_video_notes+local_videos+local_audios}\n'
     else:
         msg = f'{config[f"{loc_lang}"]["recognized"]} {config[f"{loc_lang}"]["all"]}: <b>{total}</b>'
     return msg
@@ -221,7 +223,7 @@ def bot_removed(message):
         sql.execute(f"DELETE FROM clangs WHERE chatid = '{message.chat.id}'")
         db.commit()
 
-@bot.message_handler(content_types=['voice', 'video_note', 'video'])
+@bot.message_handler(content_types=['voice', 'video_note', 'video', 'audio'])
 def voice_processing(message):
     loc_lang = working_with_sql(message)
     set_commands(message, loc_lang)
@@ -229,19 +231,23 @@ def voice_processing(message):
     if message.video_note != None:
         file_info = bot.get_file(message.video_note.file_id)
         pr = 'mp4'
-        if is_more_limit(message, file_info, loc_lang) == True:
-            return
         file_type = 'video_note'
     elif message.video != None:
         file_info = bot.get_file(message.video.file_id)
-        pr = 'mp4'
-        if is_more_limit(message, file_info, loc_lang) == True:
-            return
+        pr = message.video.file_name.split('.')[1]
         file_type = 'video'
+    elif message.audio != None:
+        file_info = bot.get_file(message.audio.file_id)
+        pr = message.audio.file_name.split('.')[1]
+        file_type = 'audio'
     else:
         file_info = bot.get_file(message.voice.file_id)
         pr = 'ogg'
         file_type = 'voice'
+
+    #Проверка на лимит
+    if is_more_limit(message, file_info, loc_lang) == True:
+        return
 
     #Скачиваем файл в нужном формате
     downloaded_file = bot.download_file(file_info.file_path)
