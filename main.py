@@ -38,7 +38,8 @@ def set_commands(chat_id, loc_lang):
     types.BotCommand(command='stats', description=config[f"{loc_lang}"]["stats"]),
     types.BotCommand(command='gstats', description=config[f"{loc_lang}"]["gstats"]),
     types.BotCommand(command='invite', description=config[f"{loc_lang}"]["invite"]),
-    types.BotCommand(command='tts', description=config[f"{loc_lang}"]["tts"])]
+    types.BotCommand(command='tts', description=config[f"{loc_lang}"]["tts"]),
+    types.BotCommand(command='extract', description=config[f"{loc_lang}"]["extract"])]
     bot.set_my_commands(commands=commands, scope=types.BotCommandScopeChat(chat_id=chat_id))
 
 #Отправляем информацию об обнове
@@ -51,11 +52,17 @@ def sending_updates():
     for row in rows:
         chat_id, loc_lang = row[0], row[1]
         upd_items = [f"{prefix} {row.lower()}\n" for row in config[f"{loc_lang}"]["upd"].split(prefix)]
-        msg = f'<b>{config[f"{loc_lang}"]["new"]} {config[f"{loc_lang}"]["cv"].lower()} {ct.VERSION}</b>\n\n<b>{config[f"{loc_lang}"]["upd_word"]}</b>:\n'
+        msg = f'<b>{config[f"{loc_lang}"]["new"]} {config[f"{loc_lang}"]["cv"].lower()} {ct.VERSION}</b>\n\n<b>{config[f"{loc_lang}"]["upd_word"]}:</b>\n'
         for item in upd_items:
             msg += f'{item}'
+        if len(ct.UPD_LINK)<=1:
+            link_reply = None
+        else:
+            link_reply = types.InlineKeyboardMarkup()
+            link_reply.add(types.InlineKeyboardButton(f'🌐 {config[f"{loc_lang}"]["upd_link"]}', url = ct.UPD_LINK))
+
         try:
-            bot.send_message(chat_id, msg, parse_mode='html')
+            bot.send_message(chat_id, msg, parse_mode='html', reply_markup=link_reply)
             c += 1
             set_commands(chat_id, loc_lang)
         except Exception as ex:
@@ -79,7 +86,12 @@ else:
 
 
 #Имена пользователей и отметки
-def get_user(user):
+def get_user(message):
+    if message.forward_from !=None: 
+        user = message.forward_from
+    else:
+        user = message.from_user
+
     mention = user.first_name
     #mention = f'<a href="tg://user?id={user.id}">{user.first_name}'
     if user.last_name != None:
@@ -122,9 +134,9 @@ def working_with_sql(message):
         all_add_reply_text = ''
         for row in config.sections():
             all_add_reply_text += config[f"{row}"]["add"].split()[0] + ' / '
-            msg += f'<b>{config[f"{row}"]["true_name"]}</b>: {config[f"{row}"]["first_1"]} @{bot.get_me().username}{config[f"{row}"]["first_2"]} /clang{config[f"{row}"]["first_3"]}\n\n'
+            msg += f'<b>{config[f"{row}"]["true_name"]}:</b> {config[f"{row}"]["first_1"]} @{bot.get_me().username}{config[f"{row}"]["first_2"]} /clang{config[f"{row}"]["first_3"]}\n\n'
         all_add_reply.add(types.InlineKeyboardButton(f'💬 {all_add_reply_text[:-2]}', url = f'https://t.me/{bot.get_me().username}?startgroup=true'))
-        msg += f'<b>Version</b>: {ct.VERSION}'
+        msg += f'<b>Version:</b> {ct.VERSION}'
 
         bot.send_message(message.chat.id, msg, parse_mode='html', reply_markup=all_add_reply)
         set_commands(message.chat.id, 'en-US')
@@ -212,14 +224,29 @@ def inviting(message):
     add_reply.add(types.InlineKeyboardButton(f'💬 {config[f"{loc_lang}"]["add"]}', url = f'https://t.me/{bot.get_me().username}?startgroup=true'))
     bot.send_message(message.chat.id, f'😉 {config[f"{loc_lang}"]["add_msg"]}', parse_mode='html', reply_markup=add_reply)
 
+def add_example(text, loc_lang, command, needed_arguments, supported_list=None):
+    supported_list = ['mp3', 'wav', 'ogg', 'mp2', 'flac']
+
+    text += f'<b>{config[f"{loc_lang}"]["example"].capitalize()}:</b>\n/{command}'
+    descriptions = ''
+    for row in needed_arguments:
+        text += f' <b><i>{config[f"{loc_lang}"][f"{row}"]}</i></b>'
+        descriptions += f'&#8226; <b><i>{config[f"{loc_lang}"][f"{row}"]}</i></b> - {config[f"{loc_lang}"][f"{row}_description"]}'
+        if row == "type":
+            descriptions += f' (<b>{config[f"{loc_lang}"]["supported"].lower()}:</b> {", ".join(supported_list)})' 
+        descriptions += '\n'
+    text += f'\n\n{descriptions}'
+    return text
+
+
 @bot.message_handler(commands=['tts'])
 def text_to_speech(message):
     loc_lang = working_with_sql(message)
+    set_commands(message.chat.id, loc_lang)
     msg = f'{config[f"{loc_lang}"]["tts_trying"]}...'
     bot_msg = bot.send_message(message.chat.id, msg, parse_mode='html')
 
     start_time = time.time()
-    needed_arguments = ['lang', 'text']
     arguments = message.text.replace('/tts', '').strip().split(' ', 1)
 
     local_langauages = {}
@@ -229,14 +256,10 @@ def text_to_speech(message):
         if arguments[0].lower() in config[f"{row}"]["true_name"].lower():
             arguments[0] = config[f"{row}"]["true_name"].lower()
 
+    supported_list = ['mp3', 'wav', 'ogg', 'mp2', 'flac']
     if len(arguments)!=2 or arguments[0].lower() not in local_langauages:
         msg = f'⚠️ {mention_user(message.from_user)}, {config[f"{loc_lang}"]["arg_error"].lower()}\n\n'
-        msg += f'<b>{config[f"{loc_lang}"]["example"].capitalize()}</b>:\n/tts'
-        descriptions = ''
-        for row in needed_arguments:
-            msg += f' <b><i>{config[f"{loc_lang}"][f"{row}"]}</i></b>'
-            descriptions += f'&#8226; <b><i>{config[f"{loc_lang}"][f"{row}"]}</i></b> - {config[f"{loc_lang}"][f"{row}_description"]}\n'
-        msg += f'\n\n{descriptions}'
+        msg = add_example(msg, loc_lang, "tts", ['lang', 'text'])
         return bot.send_message(message.chat.id, msg, parse_mode='html')
 
 
@@ -252,10 +275,7 @@ def text_to_speech(message):
     if is_more_limit(message, os.path.getsize(file_name), loc_lang, "tts_error") == True:
         return os.remove(file_name)
 
-    if message.forward_from !=None: 
-        user = get_user(message.forward_from)
-    else:
-        user = get_user(message.from_user)
+    user = get_user(message)
 
     f = open(file_name,"rb")
 
@@ -266,6 +286,76 @@ def text_to_speech(message):
     bot.delete_message(bot_msg.chat.id, bot_msg.message_id)
     f.close()
 
+    os.remove(file_name)
+
+def convert_to(msg, file_name, file_type, loc_lang):
+    from pydub import AudioSegment
+    try:
+        wav_audio = AudioSegment.from_file(file_name, file_name.split('.')[1])
+    except Exception as ex:
+        print(ex)
+        text = f'⚠️ {config[f"{loc_lang}"]["f_error"]}'
+        bot.edit_message_text(chat_id = msg.chat.id, message_id = msg.message_id, text=text, parse_mode='html', reply_markup=None)
+        print('first')
+        return os.remove(file_name)
+    
+    try:
+        os.remove(file_name)
+        file_name = file_name.replace(file_name.split('.')[1], file_type).replace(f"_{msg.chat.id}", "")
+        wav_audio.export(file_name, format = file_type)
+        return file_name
+    except Exception as ex:
+        print(ex)
+        text = f'⚠️ {config[f"{loc_lang}"]["f_error"]}'
+        bot.edit_message_text(chat_id = msg.chat.id, message_id = msg.message_id, text=text, parse_mode='html', reply_markup=None)
+        print('second')
+        return None
+
+@bot.message_handler(commands=['extract'])
+def extract_audio(message):
+    loc_lang = working_with_sql(message)
+    set_commands(message.chat.id, loc_lang)
+    arguments = message.text.replace('/extract', '').lower().strip().split(' ', 1)
+    file_type = arguments[0]
+    if (len(arguments)>1 and len(arguments[1].strip())>0): 
+        file_title = arguments[1]
+    else:
+        file_title = None
+
+    supported_list = ['mp3', 'wav', 'ogg', 'mp2', 'flac']
+    if file_type not in supported_list:
+        text = f'⚠️ {mention_user(message.from_user)}, {config[f"{loc_lang}"]["arg_error"].lower()}\n\n'
+        text = add_example(text, loc_lang, "extract", ['type', 'title'], supported_list)
+        bot.send_message(chat_id = message.chat.id, text=text, parse_mode='html', reply_markup=None)
+        return
+
+
+    msg = f'{config[f"{loc_lang}"]["extr_trying"]}...'
+    bot_msg = bot.send_message(message.chat.id, msg, parse_mode='html')
+    if message.reply_to_message != None:
+        current_msg = message.reply_to_message
+    else:
+        current_msg = message
+
+
+
+    start_time = time.time()
+    file_name = voice_processing(current_msg, extract=True, file_title = file_title)
+    if file_name == None:
+        bot.delete_message(chat_id = bot_msg.chat.id, message_id=bot_msg.message_id)
+        return
+    file_name = convert_to(bot_msg, file_name, file_type, loc_lang)
+    if file_name==None:
+        return
+
+    f = open(file_name, "rb")
+    user = get_user(message)
+
+    msg = f'{config[f"{loc_lang}"]["extr_done"]} <b>{user}</b>\n{config[f"{loc_lang}"]["done_for"]} {command_duration(loc_lang, start_time)} ⏳'
+    bot.send_audio(message.chat.id, f, caption=msg, parse_mode='html')
+    bot.delete_message(message.chat.id, message.message_id)
+    bot.delete_message(bot_msg.chat.id, bot_msg.message_id)
+    f.close()
     os.remove(file_name)
 
 
@@ -301,15 +391,8 @@ def is_more_limit(message, file_size, loc_lang, error):
     else:
         return False
 
-def recognize_your_language(file_name, lang, loc_lang, file_type, message, r_c):
-    #Подключаем Speech Recognition
-    import speech_recognition as sr
-    engine = sr.Recognizer()
-
-    with sr.AudioFile(file_name) as source:
-        print(f'Log: file {file_name} is being recorded')
-        audio = engine.record(source)
-
+def recognize_your_language(engine, audio, file_name, lang, loc_lang, file_type, message, r_c):
+    
     try:
         print(f'Log: file {file_name} is being analized')
         text = engine.recognize_google(audio, language=lang)
@@ -335,11 +418,16 @@ def bot_removed(message):
         sql.execute(f"DELETE FROM clangs WHERE chatid = '{message.chat.id}'")
         db.commit()
 
+
+
+
 @bot.message_handler(content_types=['voice', 'video_note', 'video', 'audio'])
-def voice_processing(message):
+def voice_processing(message, extract = False, file_title=None):
     loc_lang = working_with_sql(message)
     set_commands(message.chat.id, loc_lang)
-    msg = bot.send_message(message.chat.id, f'{config[f"{loc_lang}"]["trying"]}...', parse_mode='html')
+    if extract==False:
+        msg = bot.send_message(message.chat.id, f'{config[f"{loc_lang}"]["trying"]}...', parse_mode='html')
+    
     start_time = time.time()
     #Проверка на тип файла
     if message.video_note != None:
@@ -355,6 +443,10 @@ def voice_processing(message):
         pr = message.audio.file_name.split('.')[1]
         file_type = 'audio'
     else:
+        if message.voice == None:
+            msg = f'⚠️ {config[f"{loc_lang}"]["no_media"]}'
+            bot.send_message(message.chat.id, msg, parse_mode='html')
+            return None
         file_info = bot.get_file(message.voice.file_id)
         pr = 'ogg'
         file_type = 'voice'
@@ -367,39 +459,49 @@ def voice_processing(message):
     downloaded_file = bot.download_file(file_info.file_path)
     rn = random.randint(1, 99999)
     file_name = f'{rn}_{message.chat.id}.{pr}'
-    with open(file_name, 'wb') as new_file:
-        new_file.write(downloaded_file)
+    print(file_name)
+    if extract==True:
+        if file_title!=None:
+            file_name=f"{file_title}.{pr}"
+        else:
+            file_name=f'extr_{file_name}'
+        print(file_name)
+        with open(file_name, 'wb') as new_file:
+            new_file.write(downloaded_file)
+        return file_name
+    else:
+        with open(file_name, 'wb') as new_file:
+            new_file.write(downloaded_file)
+
 
 
     #Конвертация в wav
-    from pydub import AudioSegment
-    try:
-        wav_audio = AudioSegment.from_file(file_name, file_name.split('.')[1])
-    except Exception as ex:
-        print(ex)
-        text = f'{config[f"{loc_lang}"]["r_error"]} 😣'
-        bot.edit_message_text(chat_id = msg.chat.id, message_id = msg.message_id, text=text, parse_mode='html', reply_markup=None)
-        return os.remove(file_name)
-    wav_audio.export(file_name.replace(file_name.split('.')[1], 'wav'), format = "wav")
-    os.remove(file_name)
-    file_name = file_name.replace(file_name.split('.')[1], 'wav')
+    file_name = convert_to(msg, file_name, "wav", loc_lang)
+    if file_name==None:
+        return
 
     text = ''
     r_c = 0
 
+    #Подключаем Speech Recognition
+    import speech_recognition as sr
+    engine = sr.Recognizer()
+
+    with sr.AudioFile(file_name) as source:
+        print(f'Log: file {file_name} is being recorded')
+        audio = engine.record(source)
+
     for row in config.sections():
-        recognized, r_c = recognize_your_language(file_name, row, loc_lang, file_type, message, r_c)
+        recognized, r_c = recognize_your_language(engine, audio, file_name, row, loc_lang, file_type, message, r_c)
         text += f'<b>{config[f"{row}"]["true_name"]}</b> - {recognized}\n'
 
     os.remove(file_name)
     print(f'Log: file {file_name} is deleted')
     
-    if message.forward_from !=None: 
-        user = get_user(message.forward_from)
-    else:
-        user = get_user(message.from_user)
+    user = get_user(message)
+
     c_all = count_all(message, loc_lang, False)
-    bot.edit_message_text(chat_id = msg.chat.id, message_id = msg.message_id, text = f'{config[f"{loc_lang}"]["from"]} <b>{user}</b>:\n\n{text[0].upper()}{text[1:]}\n{config[f"{loc_lang}"]["done_for"]} {command_duration(loc_lang, start_time)} ⏳\n{c_all} 🗣\n<b>{config[f"{loc_lang}"]["cv"]} {ct.VERSION} 🧑‍💻</b>', parse_mode='html')
+    bot.edit_message_text(chat_id = msg.chat.id, message_id = msg.message_id, text = f'{config[f"{loc_lang}"]["from"]} <b>{user}:</b>\n\n{text[0].upper()}{text[1:]}\n{config[f"{loc_lang}"]["done_for"]} {command_duration(loc_lang, start_time)} ⏳\n{c_all} 🗣\n<b>{config[f"{loc_lang}"]["cv"]} {ct.VERSION} 🧑‍💻</b>', parse_mode='html')
     #bot.send_message(message.chat.id, f'{config[f"{loc_lang}"]["from"]} <b>{user}</b>:\n{text[0].upper()}{text[1:]}\n\n<code>P.S. {config[f"{loc_lang}"]["bv"]} 🧑‍💻</code>', parse_mode='html')
 
 @bot.callback_query_handler(func=lambda call: True)
