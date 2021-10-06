@@ -55,7 +55,7 @@ def sending_updates():
         msg = f'<b>{config[f"{loc_lang}"]["new"]} {config[f"{loc_lang}"]["cv"].lower()} {ct.VERSION}</b>\n\n<b>{config[f"{loc_lang}"]["upd_word"]}:</b>\n'
         for item in upd_items:
             msg += f'{item}'
-        if len(ct.UPD_LINK)<=1:
+        if 'https' not in ct.UPD_LINK.lower():
             link_reply = None
         else:
             link_reply = types.InlineKeyboardMarkup()
@@ -436,7 +436,10 @@ def voice_processing(message, extract = False, file_title=None):
         file_type = 'video_note'
     elif message.video != None:
         file_info = bot.get_file(message.video.file_id)
-        pr = message.video.file_name.split('.')[1]
+        if message.video.file_name==None:
+            pr = 'mp4'
+        else:
+            pr = message.video.file_name.split('.')[1]
         file_type = 'video'
     elif message.audio != None:
         file_info = bot.get_file(message.audio.file_id)
