@@ -340,7 +340,7 @@ def extract_audio(message):
 
 
     start_time = time.time()
-    file_name = voice_processing(current_msg, extract=True, file_title = file_title)
+    file_name = voice_processing(current_msg, extract=True, file_title = file_title, error = "e_error")
     if file_name == None:
         bot.delete_message(chat_id = bot_msg.chat.id, message_id=bot_msg.message_id)
         return
@@ -384,9 +384,9 @@ def is_bot_admin(message):
         return True, loc_lang
 
 def is_more_limit(message, file_size, loc_lang, error):
-    limit = 50
+    limit = 20
     if round(file_size/(10**6))>limit:
-        bot.send_message(message.chat.id, f'⚠️ {config[f"{loc_lang}"][f"{error}"]}{config[f"{loc_lang}"]["limit"]}', parse_mode='html')
+        bot.send_message(message.chat.id, f'⚠️ {config[f"{loc_lang}"][f"{error}"]}{config[f"{loc_lang}"]["limit1"]} {limit} {config[f"{loc_lang}"]["limit2"]}', parse_mode='html')
         return True
     else:
         return False
@@ -422,27 +422,28 @@ def bot_removed(message):
 
 
 @bot.message_handler(content_types=['voice', 'video_note', 'video', 'audio'])
-def voice_processing(message, extract = False, file_title=None):
+def voice_processing(message, extract = False, file_title=None, error = None):
     loc_lang = working_with_sql(message)
     set_commands(message.chat.id, loc_lang)
     if extract==False:
         msg = bot.send_message(message.chat.id, f'{config[f"{loc_lang}"]["trying"]}...', parse_mode='html')
-    
+        error = "r_error"
+
     start_time = time.time()
     #Проверка на тип файла
     if message.video_note != None:
-        file_info = bot.get_file(message.video_note.file_id)
+        file = message.video_note
         pr = 'mp4'
         file_type = 'video_note'
     elif message.video != None:
-        file_info = bot.get_file(message.video.file_id)
+        file = message.video
         if message.video.file_name==None:
             pr = 'mp4'
         else:
             pr = message.video.file_name.split('.')[1]
         file_type = 'video'
     elif message.audio != None:
-        file_info = bot.get_file(message.audio.file_id)
+        file = message.audio
         pr = message.audio.file_name.split('.')[1]
         file_type = 'audio'
     else:
@@ -450,13 +451,18 @@ def voice_processing(message, extract = False, file_title=None):
             msg = f'⚠️ {config[f"{loc_lang}"]["no_media"]}'
             bot.send_message(message.chat.id, msg, parse_mode='html')
             return None
-        file_info = bot.get_file(message.voice.file_id)
+        file = message.voice
         pr = 'ogg'
         file_type = 'voice'
 
     #Проверка на лимит
-    if is_more_limit(message, file_info.file_size, loc_lang, "r_error") == True:
-        return
+    if is_more_limit(message, file.file_size, loc_lang, error) == True:
+        if extract == False:
+            bot.delete_message(msg.chat.id, msg.message_id)
+        return None
+
+    file_info = bot.get_file(file.file_id)
+
 
     #Скачиваем файл в нужном формате
     downloaded_file = bot.download_file(file_info.file_path)
