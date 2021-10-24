@@ -67,3 +67,4 @@ ffmpeg==1.4
 configparser==5.0.2
 SpeechRecognition==3.8.1
 pydub==0.25.1
+easyocr==1.4.1
