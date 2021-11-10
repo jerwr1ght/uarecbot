@@ -9,6 +9,13 @@ import os
 from configparser import ConfigParser
 import time
 from time import sleep
+#Подключаем Speech Recognition
+import speech_recognition as sr
+engine = sr.Recognizer()
+'''#Подключаем EasyOCR
+import easyocr
+reader = easyocr.Reader(["ru", "en", "uk"])'''
+
 global db
 global sql
 db = psycopg2.connect(database='dbir1kfgtc2gr', user='wgqusjxghdknsd', port="5432", password='9e0dfc871e76a775b7df2f9b8f732994ec3d0aed806485f11b5366893e8027a7', host='ec2-23-20-208-173.compute-1.amazonaws.com', sslmode='require')
@@ -39,7 +46,8 @@ def set_commands(chat_id, loc_lang):
     types.BotCommand(command='gstats', description=config[f"{loc_lang}"]["gstats"]),
     types.BotCommand(command='invite', description=config[f"{loc_lang}"]["invite"]),
     types.BotCommand(command='tts', description=config[f"{loc_lang}"]["tts"]),
-    types.BotCommand(command='extract', description=config[f"{loc_lang}"]["extract"])]
+    types.BotCommand(command='extract', description=config[f"{loc_lang}"]["extract"]),
+    types.BotCommand(command='nosilence', description=config[f"{loc_lang}"]["silence"])]
     bot.set_my_commands(commands=commands, scope=types.BotCommandScopeChat(chat_id=chat_id))
 
 #Отправляем информацию об обнове
@@ -186,6 +194,35 @@ def count_all(message, loc_lang, is_full):
         msg = f'{config[f"{loc_lang}"]["recognized"]} {config[f"{loc_lang}"]["all"]}: <b>{total}</b>'
     return msg
 
+def cutting_silence(message, file_name):
+    from pydub import AudioSegment, silence
+    file_type = file_name[file_name.index('.')+1]
+    wav_audio = AudioSegment.from_file(file_name, file_type)
+    silence_list = silence.detect_silence(wav_audio, min_silence_len=250, silence_thresh= -45)
+    lim = len(silence_list)
+    print(silence_list)
+    
+    if lim == 0:
+        return file_name
+
+    frame_start, non_silence_audio = 0, None
+    for row in silence_list:
+        frame_end = row[0]
+        if non_silence_audio==None:
+            non_silence_audio = wav_audio[frame_start:frame_end]
+        else:
+            non_silence_audio += wav_audio[frame_start:frame_end]
+        frame_start = row[1]
+    
+    non_silence_audio += wav_audio[silence_list[-1][1]:]
+    new_file_name = 'edited_'+file_name.replace(file_type, 'wav')
+    non_silence_audio.export(new_file_name, format = 'wav')
+    #f = open(new_file_name, 'rb')
+    #bot.send_voice(chat_id=message.chat.id, voice = f)
+    #f.close()
+    os.remove(file_name)
+    return new_file_name
+
 
 @bot.message_handler(commands=['start'])
 def welcome(message):
@@ -294,7 +331,10 @@ def convert_to(msg, file_name, file_type, loc_lang):
         wav_audio = AudioSegment.from_file(file_name, file_name.split('.')[1])
     except Exception as ex:
         print(ex)
-        text = f'⚠️ {config[f"{loc_lang}"]["f_error"]}'
+        if 'end of file' in str(ex).lower():
+            text = f'⚠️ {config[f"{loc_lang}"]["end_error"]}'
+        else:
+            text = f'⚠️ {config[f"{loc_lang}"]["f_error"]}'
         bot.edit_message_text(chat_id = msg.chat.id, message_id = msg.message_id, text=text, parse_mode='html', reply_markup=None)
         print('first')
         return os.remove(file_name)
@@ -358,7 +398,32 @@ def extract_audio(message):
     f.close()
     os.remove(file_name)
 
+@bot.message_handler(commands=['nosilence'])
+def no_silence(message):
+    loc_lang = working_with_sql(message)
+    set_commands(message.chat.id, loc_lang)
 
+    msg = f'{config[f"{loc_lang}"]["del_trying"]}...'
+    bot_msg = bot.send_message(message.chat.id, msg, parse_mode='html')
+
+    if message.reply_to_message != None:
+        current_msg = message.reply_to_message
+    else:
+        current_msg = message
+
+    start_time = time.time()
+    user = get_user(message)
+    file_name = voice_processing(current_msg, extract=False, file_title = None, error = "s_error", del_silence=True)
+    if file_name == None or 'edited' not in file_name:
+        os.remove(file_name)
+        return bot.edit_message_text(chat_id = bot_msg.chat.id, message_id=bot_msg.message_id, text={config[f"{loc_lang}"]["s_error"]}+' 😣')
+    
+    f = open(file_name, "rb")
+    msg = f'{config[f"{loc_lang}"]["del_done"]} <b>{user}</b>\n{config[f"{loc_lang}"]["done_for"]} {command_duration(loc_lang, start_time)} ⏳'
+    bot.delete_message(chat_id=bot_msg.chat.id, message_id=bot_msg.message_id)
+    bot.send_voice(chat_id = message.chat.id, voice=f, caption=msg, parse_mode='html')
+    f.close()
+    os.remove(file_name)
 
 
 
@@ -422,7 +487,7 @@ def bot_removed(message):
 
 
 @bot.message_handler(content_types=['voice', 'video_note', 'video', 'audio'])
-def voice_processing(message, extract = False, file_title=None, error = None):
+def voice_processing(message, extract = False, file_title=None, error = None, del_silence = False):
     loc_lang = working_with_sql(message)
     set_commands(message.chat.id, loc_lang)
     if extract==False:
@@ -489,12 +554,16 @@ def voice_processing(message, extract = False, file_title=None, error = None):
     if file_name==None:
         return
 
+    file_name = cutting_silence(message, file_name)
+
+    if del_silence == True:
+        bot.delete_message(msg.chat.id, msg.message_id)
+        return file_name 
+
+
     text = ''
     r_c = 0
 
-    #Подключаем Speech Recognition
-    import speech_recognition as sr
-    engine = sr.Recognizer()
 
     with sr.AudioFile(file_name) as source:
         print(f'Log: file {file_name} is being recorded')
@@ -512,6 +581,47 @@ def voice_processing(message, extract = False, file_title=None, error = None):
     c_all = count_all(message, loc_lang, False)
     bot.edit_message_text(chat_id = msg.chat.id, message_id = msg.message_id, text = f'{config[f"{loc_lang}"]["from"]} <b>{user}:</b>\n\n{text[0].upper()}{text[1:]}\n{config[f"{loc_lang}"]["done_for"]} {command_duration(loc_lang, start_time)} ⏳\n{c_all} 🗣\n<b>{config[f"{loc_lang}"]["cv"]} {ct.VERSION} 🧑‍💻</b>', parse_mode='html')
     #bot.send_message(message.chat.id, f'{config[f"{loc_lang}"]["from"]} <b>{user}</b>:\n{text[0].upper()}{text[1:]}\n\n<code>P.S. {config[f"{loc_lang}"]["bv"]} 🧑‍💻</code>', parse_mode='html')
+
+
+'''@bot.message_handler(content_types=['photo'])
+def chatting(message):
+    loc_lang = working_with_sql(message)
+    set_commands(message.chat.id, loc_lang)
+    bot_msg = bot.send_message(message.chat.id, f'{config[f"{loc_lang}"]["trying"]}...', parse_mode='html')
+
+    start_time = time.time()
+    file_info = bot.get_file(message.photo[-1].file_id)
+    downloaded_file = bot.download_file(file_info.file_path)
+
+    rn = random.randint(1, 99999)
+    file_name = f'{rn}_{message.chat.id}.jpg'
+
+    with open(file_name, 'wb') as new_file:
+        new_file.write(downloaded_file)
+
+    accuracys = reader.readtext(file_name)
+    if accuracys == []:
+        return bot.edit_message_text(chat_id=bot_msg.chat.id, message_id=bot_msg.message_id, text=f'{config[f"{loc_lang}"]["r_error"]} 😣')
+    #print(accuracys)
+    av_acc = 0
+    for acc in accuracys:
+        av_acc += acc[2]
+    av_acc = round(av_acc/len(accuracys)*100, 2)
+    #print(av_acc)
+
+    recognized_strings = reader.readtext(file_name, detail=0, paragraph=True)
+    user = get_user(message)
+
+    msg = f'{config[f"{loc_lang}"]["from"]} <b>{user}:</b>\n\n'
+    for item in recognized_strings:
+        msg += f'{item}\n'
+    if recognized_strings == []:
+        msg += f'{config[f"{loc_lang}"]["r_error"]} 😣\n'
+    msg += f'\n{config[f"{loc_lang}"]["done_for"]} {command_duration(loc_lang, start_time)} ⏳\n<b>{config[f"{loc_lang}"]["cv"]} {ct.VERSION} 🧑‍💻</b>'
+    #{text[0].upper()}{text[1:]}\n{config[f"{loc_lang}"]["done_for"]} {command_duration(loc_lang, start_time)} ⏳\n{c_all} 🗣\n<b>{config[f"{loc_lang}"]["cv"]} {ct.VERSION} 🧑‍💻</b>'
+    bot.edit_message_text(chat_id = bot_msg.chat.id, message_id = bot_msg.message_id, text = msg, parse_mode='html')
+    os.remove(file_name)'''
+
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_inline(call):
