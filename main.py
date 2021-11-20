@@ -194,9 +194,9 @@ def count_all(message, loc_lang, is_full):
         msg = f'{config[f"{loc_lang}"]["recognized"]} {config[f"{loc_lang}"]["all"]}: <b>{total}</b>'
     return msg
 
-def cutting_silence(message, file_name):
+def cutting_silence(message, file_name, ftype = None):
     from pydub import AudioSegment, silence
-    file_type = file_name[file_name.index('.')+1]
+    file_type = file_name[file_name.index('.')+1:]
     wav_audio = AudioSegment.from_file(file_name, file_type)
     silence_list = silence.detect_silence(wav_audio, min_silence_len=250, silence_thresh= -45)
     lim = len(silence_list)
@@ -215,8 +215,10 @@ def cutting_silence(message, file_name):
         frame_start = row[1]
     
     non_silence_audio += wav_audio[silence_list[-1][1]:]
-    new_file_name = 'edited_'+file_name.replace(file_type, 'wav')
-    non_silence_audio.export(new_file_name, format = 'wav')
+    if ftype == None:
+        ftype = 'wav'
+    new_file_name = 'edited_'+file_name.replace(file_type, ftype)
+    non_silence_audio.export(new_file_name, format = ftype)
     #f = open(new_file_name, 'rb')
     #bot.send_voice(chat_id=message.chat.id, voice = f)
     #f.close()
@@ -573,13 +575,19 @@ def voice_processing(message, extract = False, file_title=None, error = None, de
         recognized, r_c = recognize_your_language(engine, audio, file_name, row, loc_lang, file_type, message, r_c)
         text += f'<b>{config[f"{row}"]["true_name"]}</b> - {recognized}\n'
 
-    os.remove(file_name)
-    print(f'Log: file {file_name} is deleted')
+    
     
     user = get_user(message)
 
     c_all = count_all(message, loc_lang, False)
-    bot.edit_message_text(chat_id = msg.chat.id, message_id = msg.message_id, text = f'{config[f"{loc_lang}"]["from"]} <b>{user}:</b>\n\n{text[0].upper()}{text[1:]}\n{config[f"{loc_lang}"]["done_for"]} {command_duration(loc_lang, start_time)} ⏳\n{c_all} 🗣\n<b>{config[f"{loc_lang}"]["cv"]} {ct.VERSION} 🧑‍💻</b>', parse_mode='html')
+    bot.delete_message(chat_id = msg.chat.id, message_id = msg.message_id)
+    f = open(file_name, 'rb')
+    bot.send_voice(voice = f, chat_id = message.chat.id, 
+        caption = f'{config[f"{loc_lang}"]["from"]} <b>{user}:</b>\n\n{text[0].upper()}{text[1:]}\n{config[f"{loc_lang}"]["done_for"]} {command_duration(loc_lang, start_time)} ⏳\n{c_all} 🗣\n<b>{config[f"{loc_lang}"]["cv"]} {ct.VERSION} 🧑‍💻</b>', parse_mode='html')
+    f.close()
+    os.remove(file_name)
+    print(f'Log: file {file_name} is deleted')
+
     #bot.send_message(message.chat.id, f'{config[f"{loc_lang}"]["from"]} <b>{user}</b>:\n{text[0].upper()}{text[1:]}\n\n<code>P.S. {config[f"{loc_lang}"]["bv"]} 🧑‍💻</code>', parse_mode='html')
 
 
